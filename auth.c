@@ -35,7 +35,7 @@ static int *get_client_ip(struct connection *c) {
 
 /* Write interesting information about a connection attempt to  LOGFILE. 
  * Returns -1 on error. */
-static int log_attempt(struct connection *c) {
+static int log_attempt(struct connection *c, int is_cve_2018_10933) {
     FILE *f;
     int r;
 
@@ -54,11 +54,18 @@ static int log_attempt(struct connection *c) {
         return -1;
     }
 
-    c->user = ssh_message_auth_user(c->message);
-    c->pass = ssh_message_auth_password(c->message);
+    if (is_cve_2018_10933) {
+      if (DEBUG) { printf("%s %s CVE-2018-10933\n", c->con_time, c->client_ip); }
+      r = fprintf(f, "%s %s CVE-2018-10933\n", c->con_time, c->client_ip);
 
-    if (DEBUG) { printf("%s %s %s %s\n", c->con_time, c->client_ip, c->user, c->pass); }
-    r = fprintf(f, "%s %s %s %s\n", c->con_time, c->client_ip, c->user, c->pass);
+    } else {
+      c->user = ssh_message_auth_user(c->message);
+      c->pass = ssh_message_auth_password(c->message);
+
+      if (DEBUG) { printf("%s %s %s %s\n", c->con_time, c->client_ip, c->user, c->pass); }
+      r = fprintf(f, "%s %s %s %s\n", c->con_time, c->client_ip, c->user, c->pass);
+    }
+
     fclose(f);
     return r;
 }
@@ -85,10 +92,13 @@ int handle_auth(ssh_session session) {
 
         /* Log the authentication request and disconnect. */
         if (ssh_message_subtype(con.message) == SSH_AUTH_METHOD_PASSWORD) {
-                log_attempt(&con);
+            log_attempt(&con, 0);
+        }
+        else if (ssh_message_type(con.message) == 2 && ssh_message_subtype(con.message) == 1) {
+            log_attempt(&con, 1);
         }
         else {
-            if (DEBUG) { fprintf(stderr, "Not a password authentication attempt.\n"); }
+            if (DEBUG) { fprintf(stderr, "Not a password authentication attempt (type=%d, subtype=%d).\n", ssh_message_type(con.message), ssh_message_subtype(con.message)); }
         }
 
         /* Send the default message regardless of the request type. */
