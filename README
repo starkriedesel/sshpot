@@ -1,3 +1,5 @@
+This is a fork of the original sshpot (https://github.com/PeteMo/sshpot) to add detection fo CVE-2018-10933 (libssh login bypass).
+
 Name:
 
     sshpot
